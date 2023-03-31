@@ -9,6 +9,9 @@ import { db } from "../firebase";
 import ModelSelection from "./ModelSelection";
 import useSWR from "swr"
 import { AudioRecorder } from 'audio-recorder-polyfill';
+import { WavHeader, WavBuilder } from 'lamejs';
+import toWav from 'audiobuffer-to-wav';
+
 
 type Props = {
   chatId: string;
@@ -26,6 +29,154 @@ function ChatInput({ chatId }: Props) {
 
   const [isRecording, setIsRecording] = useState(false);
 
+  // const handleMicrophoneClick = () => {
+  //   if (!isRecording) {
+  //     console.log("Recording...")
+  //     navigator.mediaDevices.getUserMedia({ audio: true })
+  //       .then((stream) => {
+  //         const chunks = [];
+  //         const mediaRecorder = new MediaRecorder(stream);
+  //         mediaRecorder.start();
+  //         setTimeout(() => {
+  //           mediaRecorder.stop();
+  //           setIsRecording(false);
+  //         }, 5000); // Stop recording after 5 seconds
+  //         mediaRecorder.addEventListener("dataavailable", (event) => {
+  //           chunks.push(event.data);
+  //         });
+
+  //         mediaRecorder.addEventListener("stop", () => {
+  //           const audioBlob = new Blob(chunks);
+  //           const reader = new FileReader();
+  //           reader.onload = function () {
+  //             const arrayBuffer = reader.result;
+  //             const audioContext = new AudioContext();
+  //             audioContext.decodeAudioData(arrayBuffer, function (audioBuffer) {
+  //               const wav = toWav(audioBuffer);
+  //               const wavBlob = new Blob([new DataView(wav)], { type: 'audio/wav' });
+  //               const formData = new FormData();
+  //               formData.append("file", wav);
+  //               formData.append("model", "whisper-1");
+  //               fetch("https://api.openai.com/v1/audio/transcriptions", {
+  //                 method: "POST",
+  //                 headers: {
+  //                   "Authorization": `Bearer ${process.env.NEXT_PUBLIC_OPENAI_API_KEY}`,
+  //                 },
+  //                 body: formData,
+  //               })
+  //                 .then(response => response.json())
+  //                 .then(data => {
+  //                   setPrompt(data.text);
+  //                 })
+  //                 .catch(error => console.error(error));
+  //             });
+  //           };
+  //           reader.readAsArrayBuffer(audioBlob);
+  //         });
+  //       })
+  //       .catch((error) => {
+  //         console.error(error);
+  //       });
+  //   }
+  //   setIsRecording(!isRecording);
+  // };
+  // const handleMicrophoneClick = () => {
+  //   if (!isRecording) {
+  //     console.log("Recording...")
+  //     navigator.mediaDevices.getUserMedia({ audio: true })
+  //       .then((stream) => {
+  //         const chunks = [];
+  //         const mediaRecorder = new MediaRecorder(stream);
+  //         mediaRecorder.start();
+  //         setTimeout(() => {
+  //           mediaRecorder.stop();
+  //           setIsRecording(false);
+  //         }, 5000); // Stop recording after 5 seconds
+  //         mediaRecorder.addEventListener("dataavailable", (event) => {
+  //           chunks.push(event.data);
+  //         });
+
+  //         mediaRecorder.addEventListener("stop", () => {
+  //           const audioBlob = new Blob(chunks);
+  //           const audioContext = new AudioContext();
+  //           const fileReader = new FileReader();
+  //           fileReader.readAsArrayBuffer(audioBlob);
+  //           fileReader.onloadend = () => {
+  //             const audioData = fileReader.result;
+  //             audioContext.decodeAudioData(audioData).then((decodedData) => {
+  //               const wavData = new Int16Array(decodedData.getChannelData(0).length);
+  //               for (let i = 0; i < decodedData.getChannelData(0).length; i++) {
+  //                 wavData[i] = decodedData.getChannelData(0)[i] * 0x7fff;
+  //               }
+  //               const wavHeader = new WavHeader(decodedData.sampleRate, 1, decodedData.length);
+  //               const wavBlob = new Blob([wavHeader.toDataView(), new DataView(wavData.buffer)], { type: 'audio/wav' });
+  //               const formData = new FormData();
+  //               formData.append("file", wavBlob);
+  //               formData.append("model", "whisper-1");
+  //               fetch("https://api.openai.com/v1/audio/transcriptions", {
+  //                 method: "POST",
+  //                 headers: {
+  //                   "Authorization": `Bearer ${process.env.NEXT_PUBLIC_OPENAI_API_KEY}`,
+  //                 },
+  //                 body: formData,
+  //               })
+  //                 .then(response => response.json())
+  //                 .then(data => {
+  //                   setPrompt(data.text);
+  //                 })
+  //                 .catch(error => console.error(error));
+  //             });
+  //           };
+  //         });
+  //       })
+  //       .catch((error) => {
+  //         console.error(error);
+  //       });
+  //   }
+  //   setIsRecording(!isRecording);
+  // };
+
+
+  // const handleMicrophoneClick = () => {
+  //   if (!isRecording) {
+  //     console.log("Recording...")
+  //     navigator.mediaDevices.getUserMedia({ audio: true })
+  //       .then((stream) => {
+  //         const chunks = [];
+  //         const mediaRecorder = new MediaRecorder(stream);
+  //         mediaRecorder.start();
+  //         setTimeout(() => {
+  //           mediaRecorder.stop();
+  //           setIsRecording(false);
+  //         }, 5000); // Stop recording after 5 seconds
+  //         mediaRecorder.addEventListener("dataavailable", (event) => {
+  //           chunks.push(event.data);
+  //         });
+
+  //         mediaRecorder.addEventListener("stop", () => {
+  //           const formData = new FormData();
+  //           formData.append("file", new Blob(chunks));
+  //           formData.append("model", "whisper-1");
+  //           fetch("https://api.openai.com/v1/audio/transcriptions", {
+  //             method: "POST",
+  //             headers: {
+  //               "Authorization": `Bearer ${process.env.NEXT_PUBLIC_OPENAI_API_KEY}`,
+  //             },
+  //             body: formData,
+  //           })
+  //             .then(response => response.json())
+  //             .then(data => {
+  //               setPrompt(data.text);
+  //             })
+  //             .catch(error => console.error(error));
+  //         });
+  //       })
+  //       .catch((error) => {
+  //         console.error(error);
+  //       });
+  //   }
+  //   setIsRecording(!isRecording);
+  // };
 
   const handleMicrophoneClick = () => {
     if (!isRecording) {
@@ -44,15 +195,17 @@ function ChatInput({ chatId }: Props) {
           });
 
           mediaRecorder.addEventListener("stop", () => {
-            const formData = new FormData();
-            formData.append("file", new Blob(chunks));
-            formData.append("model", "whisper-1");
-            fetch("https://api.openai.com/v1/audio/transcriptions", {
+
+            const audioBlob = new Blob(chunks);
+
+            console.log(audioBlob);
+
+            const fd = new FormData();
+            fd.append('file', audioBlob);
+
+            fetch("/api/transcribe", {
               method: "POST",
-              headers: {
-                "Authorization": `Bearer ${process.env.NEXT_PUBLIC_OPENAI_API_KEY}`,
-              },
-              body: formData,
+              body: fd,
             })
               .then(response => response.json())
               .then(data => {
@@ -67,6 +220,7 @@ function ChatInput({ chatId }: Props) {
     }
     setIsRecording(!isRecording);
   };
+
 
 
 
