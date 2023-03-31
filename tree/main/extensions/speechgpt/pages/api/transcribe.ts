@@ -18,6 +18,7 @@ export default async function handler(
   formData.append("model", "whisper-1");
 
   // Convert audio blob to WAV file
+  console.log(req.file.buffer);
   const audioBlob = req.file.buffer;
 
   const arrayBuffer = await Blob.prototype.arrayBuffer.call(audioBlob);
