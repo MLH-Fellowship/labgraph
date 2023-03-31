@@ -1,6 +1,6 @@
 "use client";
 
-import { PaperAirplaneIcon } from "@heroicons/react/24/solid";
+import { PaperAirplaneIcon, MicrophoneIcon } from "@heroicons/react/24/solid";
 import { addDoc, getDocs, collection, serverTimestamp } from "firebase/firestore";
 import { useSession } from "next-auth/react";
 import { FormEvent, useState } from "react";
@@ -8,7 +8,7 @@ import { toast } from "react-hot-toast";
 import { db } from "../firebase";
 import ModelSelection from "./ModelSelection";
 import useSWR from "swr"
-
+import { AudioRecorder } from 'audio-recorder-polyfill';
 
 type Props = {
   chatId: string;
@@ -22,6 +22,52 @@ function ChatInput({ chatId }: Props) {
   const { data: model, mutate: setModel } = useSWR("model", {
     fallbackData: "text-davinci-003"
   })
+
+
+  const [isRecording, setIsRecording] = useState(false);
+
+
+  const handleMicrophoneClick = () => {
+    if (!isRecording) {
+      console.log("Recording...")
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then((stream) => {
+          const chunks = [];
+          const mediaRecorder = new MediaRecorder(stream);
+          mediaRecorder.start();
+          setTimeout(() => {
+            mediaRecorder.stop();
+            setIsRecording(false);
+          }, 5000); // Stop recording after 5 seconds
+          mediaRecorder.addEventListener("dataavailable", (event) => {
+            chunks.push(event.data);
+          });
+
+          mediaRecorder.addEventListener("stop", () => {
+            const formData = new FormData();
+            formData.append("file", new Blob(chunks));
+            formData.append("model", "whisper-1");
+            fetch("https://api.openai.com/v1/audio/transcriptions", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${process.env.NEXT_PUBLIC_OPENAI_API_KEY}`,
+              },
+              body: formData,
+            })
+              .then(response => response.json())
+              .then(data => {
+                setPrompt(data.text);
+              })
+              .catch(error => console.error(error));
+          });
+        })
+        .catch((error) => {
+          console.error(error);
+        });
+    }
+    setIsRecording(!isRecording);
+  };
+
 
 
   const sendMessage = async (e: FormEvent<HTMLFormElement>) => {
@@ -88,6 +134,14 @@ function ChatInput({ chatId }: Props) {
           onChange={e => setPrompt(e.target.value)}
           type="text" placeholder="Type your message here..."
         />
+
+        <button
+          onClick={handleMicrophoneClick}
+          className={`${isRecording ? "text-green-500" : "text-gray-400"
+            } hover:text-green-500 focus:outline-none`}
+        >
+          <MicrophoneIcon className="w-6 h-6" />
+        </button>
 
         <button disabled={!prompt || !session} type="submit"
           className="bg-[#11A37F] hover:opacity-50 text-white font-bold

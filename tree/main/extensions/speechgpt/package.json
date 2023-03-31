@@ -7,10 +7,12 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.0.16",
+    "audio-recorder-polyfill": "^0.4.1",
     "classnames": "^2.3.2",
     "firebase-admin": "^11.5.0",
     "heroicons": "^2.0.16",
     "highlight.js": "^11.7.0",
+    "lamejs": "^1.2.1",
     "next": "latest",
     "next-auth": "^4.19.2",
     "openai": "^3.2.1",
