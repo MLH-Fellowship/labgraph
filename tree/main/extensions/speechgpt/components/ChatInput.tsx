@@ -1,17 +1,13 @@
-"use client";
-
+"use client"
 import { PaperAirplaneIcon, MicrophoneIcon } from "@heroicons/react/24/solid";
 import { addDoc, getDocs, collection, serverTimestamp } from "firebase/firestore";
 import { useSession } from "next-auth/react";
-import { FormEvent, useState, useRef } from "react";
+import { FormEvent, useState } from "react";
 import { toast } from "react-hot-toast";
 import { db } from "../firebase";
 import ModelSelection from "./ModelSelection";
-import useSWR from "swr"
-import { AudioRecorder } from 'audio-recorder-polyfill';
-import { WavHeader, WavBuilder } from 'lamejs';
-import toWav from 'audiobuffer-to-wav';
-
+import useSWR from "swr";
+import { ReactMic } from "react-mic";
 
 type Props = {
   chatId: string;
@@ -21,40 +17,118 @@ function ChatInput({ chatId }: Props) {
   const [prompt, setPrompt] = useState("");
   const { data: session } = useSession();
 
-
   const { data: model, mutate: setModel } = useSWR("model", {
-    fallbackData: "text-davinci-003"
-  })
-
+    fallbackData: "text-davinci-003",
+  });
 
   const [isRecording, setIsRecording] = useState(false);
-  const [audioData, setAudioData] = useState(null);
 
-  const handleMicrophoneClick = () => {
-    if (!isRecording) {
-      console.log("Recording...")
-      navigator.mediaDevices.getUserMedia({ audio: true })
-        .then((stream) => {
-          const chunks = [];
-          const mediaRecorder = new MediaRecorder(stream);
-          mediaRecorder.start();
-          setTimeout(() => {
-            mediaRecorder.stop();
-            setIsRecording(false);
-          }, 5000); // Stop recording after 5 seconds
+  const onRecordingStop = (recordedBlob: any) => {
+    if (recordedBlob) {
+      const fd = new FormData();
+      fd.append("audio", recordedBlob.blob);
 
-          mediaRecorder.addEventListener("dataavailable", (event) => {
-            chunks.push(event.data);
-            console.log("chunk", chunks);
-          });
+      fetch("/api/transcribe", {
+        method: "POST",
+        body: fd,
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          setPrompt(data.text);
+        })
+        .catch((error) => console.error(error));
+    } else {
+      console.log("no audio data");
+    }
+  };
 
-          mediaRecorder.addEventListener("stop", () => {
-            const blob = new Blob(chunks);
+  const sendMessage = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!prompt) return;
+
+    const input = prompt.trim();
+    setPrompt("");
+
+    const message: Message = {
+      text: input,
+      createdAt: serverTimestamp(),
+      user: {
+        _id: session?.user?.email!,
+        name: session?.user?.name!,
+        avatar:
+          session?.user?.image! ||
+          `https://ui-avatars.com/api/?name=${session?.user?.name}`,
+      },
+      thumbsUp: false,
+      thumbsDown: false,
+    };
+
+    await addDoc(
+      collection(
+        db,
+        "users",
+        session?.user?.email!,
+        "chats",
+        chatId,
+        "messages"
+      ),
+      message
+    );
+
+    const querySnapshot = await getDocs(
+      collection(
+        db,
+        "users",
+        session?.user?.email!,
+        "chats",
+        chatId,
+        "messages"
+      )
+    );
+    const chatHistory = querySnapshot.docs.map((doc) => doc.data());
+
+    const notification = toast.loading("SpeechGPT is thinking...");
+
+    await fetch("/api/askQuestion", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt: input,
+        chatId,
+        model,
+        chatHistory,
+        session,
+      }),
+    }).then(() => {
+      toast.success("SpeechGPT has responded!", {
+        id: notification,
+      });
+    });
+  };
+
+
+
+  return (
+    <div className="text-sm text-gray-400 rounded-lg bg-gray-700/50">
+      <form onSubmit={sendMessage} className="flex p-5 space-x-5">
+        <input
+          className="flex-1 bg-transparent focus:outline-none disabled:cursor-not-allowed disabled:text-gray-300"
+          disabled={!session}
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          type="text"
+          placeholder="Type your message here..."
+        />
+        <ReactMic
+          record={isRecording}
+          className="hidden"
+          onStop={(recording) => {
+            const blob = new Blob([recording.blob], { type: "audio/wav" });
             console.log("blob", blob)
             const url = URL.createObjectURL(blob);
             setAudioData({ blob, url });
-
-
 
             if (blob) {
               const fd = new FormData();
@@ -73,116 +147,24 @@ function ChatInput({ chatId }: Props) {
             } else {
               console.log("no audio data")
             }
-
-
-            // setTimeout(() => {
-            //   handleSend()
-            // }, 10000);
-
-          });
-        })
-        .catch((error) => {
-          console.error(error);
-        });
-    }
-    setIsRecording(!isRecording);
-  };
-
-  const handleSend = async () => {
-    console.log(audioData)
-
-    if (audioData) {
-      const fd = new FormData();
-      fd.append('audio', audioData.blob);
-
-      fetch("/api/transcribe", {
-        method: "POST",
-        body: fd,
-      })
-        .then(response => response.json())
-        .then(data => {
-          setPrompt(data.text);
-        })
-        .catch(error => console.error(error));
-
-    } else {
-      console.log("no audio data")
-    }
-
-  };
-
-
-  const sendMessage = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    if (!prompt) return;
-
-    const input = prompt.trim();
-    setPrompt("");
-
-    const message: Message = {
-      text: input,
-      createdAt: serverTimestamp(),
-      user: {
-        _id: session?.user?.email!,
-        name: session?.user?.name!,
-        avatar: session?.user?.image! || `https://ui-avatars.com/api/?name=${session?.user?.name}`,
-      },
-      thumbsUp: false,
-      thumbsDown: false
-    }
-
-    await addDoc(
-      collection(db, 'users', session?.user?.email!, 'chats', chatId, 'messages'),
-      message
-    )
-
-
-
-    // Query the Firebase database to get all messages for this chat
-    const querySnapshot = await (await getDocs(collection(db, 'users', session?.user?.email!, 'chats', chatId, 'messages')))
-
-    const chatHistory = querySnapshot.docs.map(doc => doc.data());
-    console.log("Snapshot", querySnapshot)
-
-    const notification = toast.loading('SpeechGPT is thinking...');
-
-    await fetch("/api/askQuestion", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        prompt: input,
-        chatId,
-        model,
-        chatHistory,
-        session,
-      }),
-    }).then(() => {
-      // Toast notification to say sucessful!
-      toast.success("SpeechGPT has responded!", {
-        id: notification,
-      });
-    });
-  };
-
-  return (
-    <div className="text-sm text-gray-400 rounded-lg bg-gray-700/50">
-      <form onSubmit={sendMessage} className="flex p-5 space-x-5">
-        <input
-          className="flex-1 bg-transparent focus:outline-none disabled:cursor-not-allowed disabled:text-gray-300"
-          disabled={!session}
-          value={prompt}
-          onChange={e => setPrompt(e.target.value)}
-          type="text" placeholder="Type your message here..."
+          }}
+          strokeColor="#11A37F"
+          backgroundColor="#fff"
         />
 
         <button
-          onClick={handleMicrophoneClick}
+
           className={`${isRecording ? "text-green-500" : "text-gray-400"
             } hover:text-green-500 focus:outline-none`}
         >
-          <MicrophoneIcon className="w-6 h-6" />
+          {isRecording ?
+            <div className="w-6 h-6 animate-pulse">
+              <svg viewBox="0 0 24 24">
+                <path fill="currentColor" d="M5 12H4v2h1v-2zm2.71-5.63L6.29 6.71 4.88 5.3l1.41-1.42 1.42 1.42zm9.58-1.42L13.71 6.7l-1.42-1.42 1.41-1.41 1.42 1.41zm-6.37 6.36L7.76 8.47 6.34 9.88l2.93 2.93 1.41-1.41zM19 12h-1v2h1v-2zm-3.29 5.63l-1.42-1.42 1.41-1.41 1.42 1.41-1.41 1.42zm-2.34 2.34l-1.41 1.41-1.42-1.41 1.41-1.42 1.42 1.42zM12 19c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm0-14c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6z" />
+              </svg>
+            </div> :
+            <MicrophoneIcon className="w-6 h-6" />
+          }
         </button>
 
         <button disabled={!prompt || !session} type="submit"
